@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" type="image/x-icon" href="/static/favicon.ico" sizes="any">
+<title>LLMix Chat</title>
+
+<style>
+/* RESET ------------------------------------------------------------*/
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#f4f6fa}
+
+/* BUTTONS / INPUTS -------------------------------------------------*/
+button{background:#0066ff;border:0;border-radius:4px;color:#fff;font-size:1rem;
+       padding:.45rem .9rem;cursor:pointer;transition:.15s}
+button:hover:enabled{background:#0051d6}
+button:disabled{background:#9ab;cursor:not-allowed}
+button.sm{font-size:.85rem;padding:.35rem .6rem}
+button.sm.active{background:#ff9c00}
+input{padding:.55rem .7rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;width:100%}
+
+/* SCREENS ----------------------------------------------------------*/
+.screen{position:absolute;inset:0;display:none;flex-direction:column;
+        align-items:center;justify-content:center;padding:1rem}
+.screen.visible{display:flex}
+
+/* CHAT LAYOUT ------------------------------------------------------*/
+#card{display:flex;width:95%;max-width:1200px;height:75vh;background:#fff;
+      border-radius:8px;box-shadow:0 2px 10px #0003;overflow:hidden}
+#conversation{flex:3;padding:1rem;overflow-y:auto;background:#fafafa;
+              display:flex;flex-direction:column}
+#queue{flex:1;padding:1rem;border-left:1px solid #eee;overflow-y:auto}
+#queue h3{margin-bottom:.6rem}
+
+#bottom{display:flex;flex-direction:column;width:95%;max-width:1200px;
+        gap:.6rem;margin-top:.6rem}
+#modelBtns{display:flex;gap:.6rem;flex-wrap:wrap}
+#askRow{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+#ask{flex:1;min-width:200px}
+
+@media(max-width:700px){
+  #card{flex-direction:column;height:85vh}
+  #queue{border-left:0;border-top:1px solid #eee;height:35%;max-height:200px}
+}
+
+/* BUBBLES & QUEUE --------------------------------------------------*/
+.name{font-weight:600;margin-top:1rem;align-self:flex-start}
+.bubble{margin-top:.25rem;max-width:100%;background:#fff;border-radius:6px;
+        padding:.55rem .8rem;box-shadow:0 1px 3px #0002;font-size:.95rem;
+        white-space:pre-wrap;word-break:break-word;align-self:flex-start}
+details{background:#eef3ff;border-radius:4px;font-size:.85rem;
+        padding:.4rem .6rem;margin-top:.3rem;border:1px solid #d4ddff}
+details ul{margin-top:.4rem}
+ul{list-style:none}
+li{padding:.35rem .6rem;margin-bottom:.35rem;background:#e8ecf2;border-radius:4px;font-size:.9rem}
+li.self{background:#cdebd0;font-weight:600}
+
+#conversation::-webkit-scrollbar,#queue::-webkit-scrollbar{width:8px}
+#conversation::-webkit-scrollbar-thumb,#queue::-webkit-scrollbar-thumb{background:#bbb;border-radius:4px}
+
+/* LOGO -------------------------------------------------------------*/
+.logo{
+  display:block;           /* keep it centered in its parent */
+  margin:0 auto 1.2rem;
+  height:auto;             /* preserve aspect ratio */
+  width:auto;              /* → intrinsic width */
+  max-width:100%;          /* but don’t overflow very small screens */
+}
+
+/* DISCLAIMER — modern, friendly -----------------------------------*/
+.disclaimer{
+  /* card */
+  max-width:450px;
+  margin:1.6rem auto 0;
+  padding:1rem 1.8rem 1.4rem;
+  background:#fff;
+  border:1px solid #e5e7eb;            /* light gray outline */
+  border-radius:12px;
+  box-shadow:0 4px 8px rgba(0,0,0,.04);
+
+  /* copy */
+  font-size:.95rem;
+  line-height:1.6;
+  color:#374151;                       /* slate-700 */
+}
+
+/* heading */
+.disclaimer h4{
+  margin:0 0 1.1rem;
+  text-align:center;
+  font-size:1.05rem;
+  font-weight:600;
+  color:#0066ff;                       /* gentle brand accent */
+}
+
+/* list reset + spacing */
+.disclaimer ul{
+  list-style:none;
+  padding:0;
+  margin:0;
+  display:flex;
+  flex-direction:column;
+  gap:1rem;                            /* even vertical rhythm */
+}
+
+/* bullets */
+.disclaimer > ul > li{
+  position: relative;
+  padding: .85rem 1rem;
+}
+.disclaimer ul.models{
+  list-style: disc;          /* use normal bullets */
+  padding-left: 1.2rem;      /* indent nicely */
+  margin: .6rem 0 1rem;  
+}
+.disclaimer > ul{
+  list-style:none;   /* no bullets */
+  padding-left:0;    /* aligns with card edge */
+}
+.disclaimer .points{
+  margin: .6rem 0;          /* tweak up/down to taste */
+}
+</style>
+</head><body>
+
+<!-- LOGIN ------------------------------------------------------------>
+<div id="login" class="screen visible">
+  <img src="llmix.png" alt="llmix logo" class="logo">
+  <h2>Enter your name</h2><br>
+  <div style="display:flex;gap:.6rem;width:260px">
+    <input id="yourName" placeholder="name">
+    <button id="join">Join</button>
+  </div>
+  <p id="err" style="color:#d33;margin-top:.8rem;min-height:1.2em"></p>
+<div class="disclaimer">
+  <h4>Before you continue</h4>
+  <ul>
+    <li>
+  <strong>LLMIX</strong> runs on local AI models:
+    <div class="points">
+    <p> – <strong>Granite&nbsp;3.3&nbsp;2B</strong> – Chat&nbsp;&amp;&nbsp;Wiki-RAG</p>
+    <p> – <strong>Medicanite</strong>&nbsp;<em>(fine-tuned&nbsp;Granite&nbsp;3.3&nbsp;2B)</em> – Med-Chat</p>
+    <p> – <strong>Qwen Coder 1.5B</strong> – Code-Chat</p>
+    <p> – <strong>BGE Small EN v1.5</strong> – Embeddings</p>
+    </div>
+  <p>It’s clever, but it can still misunderstand questions or even invent information.</p>
+</li>
+
+    <li><strong>
+      Don’t treat its output as medical advice. Always double-check with a
+      qualified professional.
+    </li></strong>
+
+    <li>
+      Large language models sometimes <em>hallucinate</em> — they may supply
+      incorrect or misleading answers.
+    </li>
+
+    <li>
+      Use <strong>LLMIX</strong> as a helpful tool, not an expert. Apply your own judgment.
+    </li>
+  </ul>
+</div>
+</div>
+
+<!-- CHAT -------------------------------------------------------------->
+<div id="chat" class="screen">
+  <img src="llmix.png" alt="llmix logo" class="logo">
+  <div id="card">
+    <div id="conversation"></div>
+    <div id="queue"><h3>Queue:</h3><ul id="qList"></ul></div>
+  </div>
+
+  <div id="bottom">
+    <!-- model buttons row -->
+    <div id="modelBtns">
+      <button id="mGranite" class="sm active">Chat</button>
+      <button id="mMedicanite" class="sm">Med-Chat</button>
+      <button id="mQwen" class="sm">Code-Chat</button>
+      <button id="mRAG" class="sm">Wiki-Chat</button>
+    </div>
+
+    <!-- ask row -->
+    <div id="askRow">
+      <input id="ask" placeholder="Type…">
+      <button id="send" disabled>Ask</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* HELPERS -----------------------------------------------------------*/
+const $ = id => document.getElementById(id);
+const on = (el, ev, cb) => el.addEventListener(ev, cb);
+function view(id) { ["login", "chat"].forEach(s => $(s).classList.toggle("visible", s === id)); }
+
+/* STATE -------------------------------------------------------------*/
+let ws, open = false;
+let my = null;
+let loggedIn = false;           // track server-confirmed login
+let chosenModel = "Granite";
+const streamTargets = {}, userColors = {},
+      palette = ["#f94144", "#f3722c", "#f9c74f", "#90be6d",
+                 "#43aa8b", "#577590", "#277da1", "#b5179e", "#ff6d00", "#00897b"];
+
+/* NEW: persistent storage of retrieved RAG chunks ------------------*/
+const retrievalMap = {};  // { qid: [chunk, ...] }
+
+function colourFor(name) {
+  if (name.startsWith("llmix")) return "#c71585";   // all aliases same magenta
+  if (!userColors[name]) {
+    let h = 0; for (const c of name) h = (h << 5) - h + c.charCodeAt(0);
+    userColors[name] = palette[Math.abs(h) % palette.length];
+  }
+  return userColors[name];
+}
+
+/* WEBSOCKET ---------------------------------------------------------*/
+function startWS() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => open = true;
+  ws.onclose = () => { open = false; setTimeout(startWS, 1000); };
+  ws.onmessage = e => {
+    const { event, data } = JSON.parse(e.data);
+    switch (event) {
+      case "conversation_update": drawConvo(data); break;
+      case "queue_update":       drawQueue(data); break;
+      case "assistant_started":  ensureBubble(data.qid, true, data.alias || "llmix"); break;
+      case "rag_context":        showRetrieval(data.qid, data.chunks); break;
+      case "stream_token":       appendToken(data); break;
+      case "user_list":
+        // switch to chat only after our name is confirmed unique by the server
+        if (my && !loggedIn && data.includes(my)) {
+          loggedIn = true;
+          $("join").disabled = false;
+          view("chat");
+          $("send").disabled = false;
+            setTimeout(() => {
+            const c = $("conversation");
+            c.scrollTop = c.scrollHeight;
+          }, 0);
+        }
+        break;
+      case "error":
+        if ($("login").classList.contains("visible")) {
+          $("err").textContent = data.message;
+          my = null;                     // allow another attempt
+          $("join").disabled = false;
+        } else {
+          alert(data.message);
+        }
+        break;
+    }
+  };
+}
+startWS();
+const send = o => open ? ws.send(JSON.stringify(o)) : setTimeout(() => send(o), 200);
+
+/* LOGIN -------------------------------------------------------------*/
+on($("join"), "click", doLogin);                // ← keep your old handler
+on($("yourName"), "keydown", e => {             // ← new handler
+  if (e.key === "Enter") {
+    e.preventDefault();                         // stop the form beep
+    $("join").click();                          // trigger the same logic
+  }
+});
+
+function doLogin() {
+  const n = $("yourName").value.trim();
+  if (!n) { $("err").textContent = "Enter a name"; return; }
+  my = n;
+  $("err").textContent = "";
+  send({ event: "login", data: { name: n } });
+  $("join").disabled = true;                    // wait for server confirmation
+}
+
+/* MODEL TOGGLE ------------------------------------------------------*/
+["mGranite", "mQwen", "mRAG", "mMedicanite"].forEach(id => {
+  on($(id), "click", e => {
+    document.querySelectorAll("#modelBtns button").forEach(b => b.classList.remove("active"));
+    e.target.classList.add("active");
+    const txt = e.target.textContent.trim();
+    switch (txt) {
+      case "Wiki-Chat":       chosenModel = "RAG";         break;
+      case "Code-Chat":     chosenModel = "Qwen";       break;
+      case "Med-Chat":  chosenModel = "Medicanite";  break;
+      default:          chosenModel = "Granite";
+    }
+  });
+});
+
+/* ASK ---------------------------------------------------------------*/
+function submit() {
+  const t = $("ask").value.trim(); if (!t) return;
+  send({ event: "submit_prompt", data: { user: my, text: t, model: chosenModel } });
+  $("ask").value = ""; $("send").disabled = true;
+}
+on($("send"), "click", submit);
+on($("ask"), "keydown", e => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+
+/* RENDERING ---------------------------------------------------------*/
+function ensureBubble(qid, bot = false, alias = "llmix") {
+  if (streamTargets[qid]) return streamTargets[qid];
+  const wrap = $("conversation");
+  const nm   = document.createElement("div");
+  nm.className   = "name";
+  nm.style.color = colourFor(bot ? alias : my);
+  nm.textContent = (bot ? alias : my) + ":";
+  const bub = document.createElement("div"); bub.className = "bubble";
+  wrap.appendChild(nm); wrap.appendChild(bub);
+  streamTargets[qid] = bub; return bub;
+}
+
+function appendToken({ qid, token }) {
+  const tgt = ensureBubble(qid, true);   // bubble already exists
+  tgt.textContent += token;
+  tgt.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+function buildRetrievalElement(chunks) {
+  const det = document.createElement("details");
+  det.open = false;                       // collapsed by default
+  const sum = document.createElement("summary");
+  sum.textContent = `📖 Sources (${chunks.length})`;
+  det.appendChild(sum);
+  const ul = document.createElement("ul");
+  chunks.forEach(t => {
+    const li = document.createElement("li");
+    li.textContent = t.trim() + " …";        
+    ul.appendChild(li);
+  });
+  det.appendChild(ul);
+  return det;
+}
+
+function showRetrieval(qid, chunks) {
+  retrievalMap[qid] = chunks;             // store for future redraws
+  const tgt = streamTargets[qid]; if (!tgt) return;
+  tgt.after(buildRetrievalElement(chunks));
+}
+
+function drawConvo(arr) {
+  const c = $("conversation"); c.innerHTML = "";
+  for (const k in streamTargets) delete streamTargets[k];
+  arr.forEach(m => {
+    const nm = document.createElement("div"); nm.className = "name";
+    nm.style.color = colourFor(m.user);
+    nm.textContent = m.user + ":";
+    const txt = document.createElement("div"); txt.className = "bubble"; txt.textContent = m.text;
+    c.appendChild(nm); c.appendChild(txt);
+
+    // Persist or reuse chunks
+    if (m.chunks && m.chunks.length) {          // from server
+      retrievalMap[m.qid] = m.chunks;
+    }
+    if (m.is_bot && retrievalMap[m.qid]) {      // show if we have them
+      c.appendChild(buildRetrievalElement(retrievalMap[m.qid]));
+     }
+  });
+  c.scrollTop = c.scrollHeight;
+}
+
+function drawQueue(arr) {
+  const q = $("qList"); q.innerHTML = "";
+  arr.forEach(l => {
+    const li = document.createElement("li"); li.textContent = l;
+    if (l.includes(my)) li.classList.add("self"); q.appendChild(li);
+  });
+  $("send").disabled = arr.some(l => l.includes(my));
+}
+</script>
+</body></html>
+

@@ -1,0 +1,8 @@
+faiss-cpu
+numpy
+fastapi
+pydantic
+llama-cpp-python
+sentence-transformers
+uvicorn
+uvicorn[standard] 
